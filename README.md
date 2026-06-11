@@ -1,4 +1,4 @@
-# TCPTest — OpenHarmony 北向监控系统
+# GuardSysAPP — OpenHarmony 北向监控系统
 
 基于 OpenHarmony 4.0（九联开发板）的物联网北向监控系统，通过 NAPI 采集传感器数据，经 TCP 上报云服务器，支持 Web 端实时查看与控制。
 
