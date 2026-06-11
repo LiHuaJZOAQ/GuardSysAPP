@@ -8,40 +8,44 @@
 ## 功能
 
 - **WiFi 管理** — 扫描可用 WiFi、连接/断开、显示信号强度与 IP
-- **传感器采集** — 通过 `@ohos.guardsys_napi` 读取 SHT30（温湿度）和 MQ-2（烟雾）传感器
+- **传感器采集** — 通过 `@ohos.guardsys_napi` 并行读取 SHT30（温湿度）、MQ-2（烟雾）、HC-SR501（红外）
+- **自动报警** — 烟雾/温度超阈值自动触发报警模式（正常/警告/报警），驱动蜂鸣器+RGB LED
 - **TCP 通信** — 连接云服务器，上报数据，接收服务器下发的控制指令
 - **自动上报** — 定时循环上报传感器数据到服务器（间隔可配）
-- **报警控制** — 远程/本地设置蜂鸣器+LED 报警模式（正常/警告/报警）
 - **实时刷新** — 每秒自动刷新传感器数据，采集失败时前端红色错误提示
+- **绿灯初始化** — 启动时自动点亮绿灯，指示系统正常运行
 - **命令控制** — 服务器可通过 JSON 指令触发采集和报警设置
 
 ## 项目结构
 
 ```
 entry/src/main/ets/pages/
-├── Index.ets            # 原始 TCP 通信测试页（兼容保留）
-├── MonitorPage.ets       # 北向监控主页面（新入口）
-├── SensorManager.ets     # NAPI 传感器接口封装
-├── TCPClient.ets         # TCP Socket 客户端封装
-├── WifiManager.ets       # WiFi 扫描/连接管理
-└── SensorData.ets        # NAPI 原始测试页（保留）
+├── Index.ets              # 北向监控主页面（程序入口）
+├── SensorManager.ets      # NAPI 传感器接口封装（温湿度/烟雾/红外/报警）
+├── TCPClient.ets          # TCP Socket 客户端封装
+├── WifiManager.ets        # WiFi 扫描/连接管理（API 10）
+├── PriSensorData.ets      # NAPI 原始测试页（保留）
+└── PriTCPTestIndex.ets    # TCP 通信原始测试页（保留）
 ```
 
 ### 模块说明
 
 | 文件 | 职责 |
 |------|------|
-| `MonitorPage.ets` | 主界面：WiFi 配置、服务器连接、传感器卡片、自动上报、报警控制、日志 |
-| `SensorManager.ets` | 封装 `guardsys_napi` 的 `getSht30Data` / `getMq2Data` / `setAlarmStatus` |
+| `Index.ets` | 主界面：WiFi 配置、服务器连接、4 传感器卡片、自动上报、报警控制、日志 |
+| `SensorManager.ets` | 封装 `guardsys_napi` 的 `getSht30Data` / `getMq2Data` / `getIrStatus` / `setAlarmStatus`；提供 `Promise.all` 并行读取 |
 | `TCPClient.ets` | 基于 `@ohos.net.socket` 的 TCP 客户端，支持域名连接与事件回调 |
 | `WifiManager.ets` | 基于 `@ohos.wifiManager`（API 10）的 WiFi 扫描、连接、信息获取 |
+| `PriSensorData.ets` | 逐项调用 NAPI 接口的原始测试页 |
+| `PriTCPTestIndex.ets` | 原始 TCP 通信测试页（Index.ets 重命名保留） |
 
 ## 硬件依赖
 
 - 九联开发板（OpenHarmony 4.0）
-- SHT30 温湿度传感器（I2C 地址 0x44）
-- MQ-2 烟雾传感器
-- 蜂鸣器 + RGB LED（报警输出）
+- SHT30 温湿度传感器（I2C 5, 0x44）
+- MQ-2 烟雾传感器（GPIO 1）
+- HC-SR501 红外人体感应模块（GPIO 9）
+- 蜂鸣器（GPIO 384）+ RGB LED（R=381, G=382, B=383）
 
 ## 开发环境
 
@@ -56,6 +60,29 @@ entry/src/main/ets/pages/
 3. `Build → Build Hap(s)/APP(s)`
 4. 安装 HAP 到开发板
 
+## 传感器并行读取
+
+三个传感器通过 `Promise.all` 并行读取，互不干扰：
+
+```typescript
+const [sht30, mq2, ir] = await Promise.all([
+  SensorManager.getSht30Data(),
+  SensorManager.getMq2Data(),
+  SensorManager.getIrData()
+]);
+```
+
+## 自动报警逻辑
+
+每次数据采集后自动检测阈值，驱动蜂鸣器+RGB LED：
+
+| 条件 | 报警模式 | LED |
+|------|----------|-----|
+| 烟雾 >= 200 | 报警 (2) | 红色+蜂鸣器 |
+| 烟雾 >= 100 或 温度 >= 40 | 警告 (1) | 黄色 |
+| 烟雾 >= 50 或 温度 >= 35 | 正常 (0) | 绿色（提示关注） |
+| 正常范围 | 正常 (0) | 绿色 |
+
 ## 服务器协议
 
 ### 上报数据格式（开发板 → 服务器）
@@ -66,6 +93,7 @@ entry/src/main/ets/pages/
   "temp": "25.3",
   "humi": "60.1",
   "smoke": 12.34,
+  "ir": true,
   "alarm": 0
 }
 ```
@@ -112,9 +140,10 @@ entry/src/main/ets/pages/
 
 | 功能 | 引脚 |
 |------|------|
-| SHT30 I2C | 5, 0x44 |
+| SHT30 I2C | GPIO 5, 地址 0x44 |
 | MQ-2 | GPIO 1 |
-| 蜂鸣器 | 384 |
-| 红灯 | 381 |
-| 绿灯 | 382 |
-| 蓝灯 | 383 |
+| HC-SR501 红外 | GPIO 9 |
+| 蜂鸣器 | GPIO 384 |
+| 红灯 (R) | GPIO 381 |
+| 绿灯 (G) | GPIO 382 |
+| 蓝灯 (B) | GPIO 383 |

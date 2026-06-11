@@ -1,6 +1,6 @@
 {
   "src": [
-    "pages/Index",
-    "pages/MonitorPage"
+    "pages/PriTCPTestIndex",
+    "pages/Index"
   ]
 }

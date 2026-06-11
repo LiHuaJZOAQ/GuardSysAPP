@@ -9,10 +9,15 @@ export interface Mq2Data {
   smoke: number;
 }
 
+export interface IrData {
+  ir: boolean;
+}
+
 export interface SensorData {
   temp: number;
   humi: number;
   smoke: number;
+  ir: boolean;
 }
 
 export class SensorManager {
@@ -28,11 +33,35 @@ export class SensorManager {
     return result;
   }
 
-  static async getAllData(): Promise<SensorData> {
-    const sht30: Sht30Data = await SensorManager.getSht30Data();
-    const mq2: Mq2Data = await SensorManager.getMq2Data();
-    const result: SensorData = { temp: sht30.temp, humi: sht30.humi, smoke: mq2.smoke };
+  static async getIrData(): Promise<IrData> {
+    const res: IrData = await guardsys_napi.getIrStatus(9) as IrData;
+    const result: IrData = { ir: !!res.ir };
     return result;
+  }
+
+  static async getAllData(): Promise<SensorData> {
+    const all: Object = await Promise.all([
+      SensorManager.getSht30Data(),
+      SensorManager.getMq2Data(),
+      SensorManager.getIrData()
+    ]);
+    const list: Object[] = all as Object[];
+    const sht30: Sht30Data = list[0] as Sht30Data;
+    const mq2: Mq2Data = list[1] as Mq2Data;
+    const ir: IrData = list[2] as IrData;
+    const result: SensorData = {
+      temp: sht30.temp,
+      humi: sht30.humi,
+      smoke: mq2.smoke,
+      ir: ir.ir
+    };
+    return result;
+  }
+
+  static async initAlarm(): Promise<void> {
+    await guardsys_napi.setAlarmStatus(0, {
+      buzzerPin: 384, rPin: 381, gPin: 382, bPin: 383
+    });
   }
 
   static async setAlarmMode(mode: number): Promise<void> {

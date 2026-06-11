@@ -1,7 +1,7 @@
 {
-  "name": "tcptest",
+  "name": "guardsysapp",
   "version": "1.0.0",
-  "description": "Please describe the basic information.",
+  "description": "GuardSysAPP — OpenHarmony 北向监控系统",
   "main": "",
   "author": "",
   "license": "",
