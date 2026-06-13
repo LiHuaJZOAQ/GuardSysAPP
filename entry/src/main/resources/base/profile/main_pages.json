@@ -1,6 +1,8 @@
 {
   "src": [
     "pages/PriTCPTestIndex",
-    "pages/Index"
+    "pages/Index",
+    "pages/SettingsPage",
+    "pages/LogPage"
   ]
 }

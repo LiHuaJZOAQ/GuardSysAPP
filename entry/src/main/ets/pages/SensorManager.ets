@@ -21,6 +21,8 @@ export interface SensorData {
 }
 
 export class SensorManager {
+  static currentAlarmMode: number = 0;
+
   static async getSht30Data(): Promise<Sht30Data> {
     const res: Sht30Data = await guardsys_napi.getSht30Data(5, 0x44) as Sht30Data;
     const result: Sht30Data = { temp: res.temp, humi: res.humi };
@@ -65,6 +67,7 @@ export class SensorManager {
   }
 
   static async setAlarmMode(mode: number): Promise<void> {
+    SensorManager.currentAlarmMode = mode;
     await guardsys_napi.setAlarmStatus(mode, {
       buzzerPin: 384, rPin: 381, gPin: 382, bPin: 383
     });

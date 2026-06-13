@@ -1,7 +1,6 @@
 import socket from '@ohos.net.socket';
 import wifiManager from '@ohos.wifiManager';
 
-// Socket信息接口
 export interface SocketInfo {
   message: ArrayBuffer;
   remoteInfo: socket.SocketRemoteInfo;
@@ -10,8 +9,12 @@ export interface SocketInfo {
 export class TCPClient {
   private tcpClient: socket.TCPSocket | undefined = undefined;
   private isConnect: boolean = false;
+  private shouldReconnect: boolean = false;
+  private remoteHost: string = '';
+  private remotePort: number = 0;
+  private heartbeatTimer: number = -1;
+  private reconnectTimer: number = -1;
 
-  // 回调函数
   public onConnectCallback?: () => void;
   public onMessageCallback?: (message: string) => void;
   public onCloseCallback?: () => void;
@@ -21,6 +24,40 @@ export class TCPClient {
     if (this.tcpClient === undefined) {
       this.tcpClient = socket.constructTCPSocketInstance();
     }
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.isConnect) {
+        const ping: string = JSON.stringify({ type: 'ping' }) + '\n';
+        let opt: socket.TCPSendOptions = { data: ping } as socket.TCPSendOptions;
+        this.tcpClient?.send(opt);
+        console.info('heartbeat sent');
+      }
+    }, 30000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer !== -1) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = -1;
+    }
+  }
+
+  private stopReconnect(): void {
+    if (this.reconnectTimer !== -1) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = -1;
+    }
+  }
+
+  private scheduleReconnect(): void {
+    this.stopReconnect();
+    this.reconnectTimer = setTimeout(() => {
+      console.info('auto reconnect to ' + this.remoteHost + ':' + this.remotePort);
+      this.connectServer(this.remoteHost, this.remotePort);
+    }, 5000);
   }
 
   // 连接服务器（支持域名或IP）
@@ -34,11 +71,14 @@ export class TCPClient {
       return;
     }
 
+    this.remoteHost = remoteHost;
+    this.remotePort = remotePort;
+    this.shouldReconnect = true;
+
     if (this.isConnect) {
       this.closeTCPClient();
     }
 
-    // 获取本机IP地址
     let ipAddress: number = wifiManager.getIpInfo().ipAddress;
     let localIPAddress: string =
       (ipAddress >>> 24) + "." +
@@ -48,7 +88,6 @@ export class TCPClient {
 
     console.info('Local IP: ' + localIPAddress);
 
-    // 绑定本地IP地址和端口
     let netAddress: socket.NetAddress = {
       address: localIPAddress,
       port: 0,
@@ -56,17 +95,18 @@ export class TCPClient {
     } as socket.NetAddress;
 
     try {
-      // 绑定本机IP地址
       await this.tcpClient.bind(netAddress);
       console.info('bind success');
 
-      // 先注册事件回调，再发起连接（避免错过连接成功事件）
       this.tcpClient.on('message', (value: SocketInfo) => {
         let buffer: ArrayBuffer = value.message;
         let dataView: DataView = new DataView(buffer);
         let str: string = "";
         for (let i: number = 0; i < dataView.byteLength; ++i) {
           str += String.fromCharCode(dataView.getUint8(i));
+        }
+        if (str.endsWith('\n')) {
+          str = str.slice(0, -1);
         }
         console.info('received message: ' + str);
         if (this.onMessageCallback) {
@@ -77,6 +117,7 @@ export class TCPClient {
       this.tcpClient.on('connect', () => {
         console.info('on connect');
         this.isConnect = true;
+        this.startHeartbeat();
         if (this.onConnectCallback) {
           this.onConnectCallback();
         }
@@ -85,8 +126,12 @@ export class TCPClient {
       this.tcpClient.on('close', () => {
         console.info('on close');
         this.isConnect = false;
+        this.stopHeartbeat();
         if (this.onCloseCallback) {
           this.onCloseCallback();
+        }
+        if (this.shouldReconnect && this.remoteHost !== '') {
+          this.scheduleReconnect();
         }
       });
 
@@ -97,7 +142,6 @@ export class TCPClient {
         }
       });
 
-      // 发起连接
       let connectAddress: socket.NetAddress = {
         address: remoteHost,
         port: remotePort
@@ -120,8 +164,8 @@ export class TCPClient {
     }
   }
 
-  // 发送消息
-  async sendMessage(message: string | ArrayBuffer): Promise<void> {
+  // 发送消息（自动追加换行符）
+  async sendMessage(message: string): Promise<void> {
     if (this.tcpClient === undefined || !this.isConnect) {
       const err: string = 'tcpClient is undefined or not connected';
       console.error(err);
@@ -129,7 +173,7 @@ export class TCPClient {
     }
 
     let opt: socket.TCPSendOptions = {
-      data: message
+      data: message + '\n'
     } as socket.TCPSendOptions;
 
     try {
@@ -140,8 +184,11 @@ export class TCPClient {
     }
   }
 
-  // 断开连接
+  // 断开连接（主动断开时不自动重连）
   closeTCPClient(): void {
+    this.shouldReconnect = false;
+    this.stopHeartbeat();
+    this.stopReconnect();
     if (this.tcpClient === undefined || !this.isConnect) {
       return;
     }
@@ -166,8 +213,9 @@ export class TCPClient {
     console.info('TCP Client released');
   }
 
-  // 获取连接状态
   isConnected(): boolean {
     return this.isConnect;
   }
 }
+
+export const defaultTcpClient: TCPClient = new TCPClient();
