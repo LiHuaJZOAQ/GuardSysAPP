@@ -27,7 +27,9 @@ struct Index {
   @State smoke: string = '--';
   @State ir: string = '--';
   @State sensorError: string = '';
+  @State currentTime: string = '';
   private refreshTimerId: number = -1;
+  private clockTimerId: number = -1;
 
   // 报警
   @State alarmMode: string = '--';
@@ -64,13 +66,19 @@ struct Index {
     this.collectAll();
     this.startAutoRefresh();
     await this.updateStatus();
+    this.startClock();
   }
 
   onPageShow(): void {
     this.startAutoRefresh();
+    this.startClock();
   }
 
   aboutToDisappear(): void {
+    if (this.clockTimerId !== -1) {
+      clearInterval(this.clockTimerId);
+      this.clockTimerId = -1;
+    }
     if (this.refreshTimerId !== -1) {
       clearInterval(this.refreshTimerId);
       this.refreshTimerId = -1;
@@ -85,6 +93,24 @@ struct Index {
     this.refreshTimerId = setInterval(() => {
       this.collectAll(true);
     }, SharedConfig.refreshInterval);
+  }
+
+  startClock(): void {
+    if (this.clockTimerId !== -1) {
+      clearInterval(this.clockTimerId);
+    }
+    const now: Date = new Date();
+    const h: string = now.getHours().toString().padStart(2, '0');
+    const m: string = now.getMinutes().toString().padStart(2, '0');
+    const s: string = now.getSeconds().toString().padStart(2, '0');
+    this.currentTime = h + ':' + m + ':' + s;
+    this.clockTimerId = setInterval(() => {
+      const d: Date = new Date();
+      const hh: string = d.getHours().toString().padStart(2, '0');
+      const mm: string = d.getMinutes().toString().padStart(2, '0');
+      const ss: string = d.getSeconds().toString().padStart(2, '0');
+      this.currentTime = hh + ':' + mm + ':' + ss;
+    }, 1000);
   }
 
   // ---- 状态更新 ----
@@ -261,9 +287,14 @@ struct Index {
         Column({ space: 12 }) {
           // 标题栏
           Row() {
-            Text('🌐 北向监控')
+            Text('智家安防')
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
+            Text(this.currentTime)
+              .fontSize(19)
+              .fontColor('#000000')
+              .fontWeight(FontWeight.Bold)
+              .margin({ left: 10 })
             Blank()
             if (this.localIP !== '0.0.0.0') {
               Text('IP: ' + this.localIP)
