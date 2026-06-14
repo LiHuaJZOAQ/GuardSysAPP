@@ -34,6 +34,8 @@ struct Index {
   // 报警
   @State alarmMode: string = '--';
   @State alarmLog: string = '--';
+  @State isArmed: boolean = false;
+  private prevSmoke: number = 0;
 
   async aboutToAppear(): Promise<void> {
     LogStore.add('北向监控启动');
@@ -235,26 +237,70 @@ struct Index {
 
   checkAlarmThreshold(data: SensorData): void {
     let targetMode: number = 0;
-    let reason: string = '';
+    const parts: string[] = [];
 
-    if (data.smoke >= 200) {
-      targetMode = 2;
-      reason = '烟雾值过高(' + data.smoke.toFixed(1) + ')';
-    } else if (data.smoke >= 100 || data.temp >= 40) {
-      targetMode = 1;
-      reason = data.smoke >= 100 ? '烟雾偏高(' + data.smoke.toFixed(1) + ')' : '温度过高(' + data.temp.toFixed(1) + '°C)';
-    } else if (data.smoke >= 50 || data.temp >= 35) {
-      targetMode = 0;
-      reason = '数值偏高，请关注';
+    // 布防：红外有人直接触发报警
+    if (this.isArmed && data.ir) {
+      if (targetMode < 2) targetMode = 2;
+      parts.push('布防报警: 有人入侵');
     }
 
+    if (data.smoke >= 200) {
+      if (targetMode < 2) targetMode = 2;
+      parts.push('烟雾过高(' + data.smoke.toFixed(1) + ')');
+    }
+
+    // 火险+人员未撤离（布防/撤防均生效）
+    if (data.ir && (data.smoke >= 100 || data.temp >= 40) && targetMode < 2) {
+      targetMode = 2;
+      parts.push('危险区域有人未撤离');
+    }
+
+    if ((data.smoke >= 100 || data.temp >= 40) && targetMode < 2) {
+      if (targetMode < 1) targetMode = 1;
+    }
+    if (data.smoke >= 100) {
+      parts.push('烟雾偏高(' + data.smoke.toFixed(1) + ')');
+    } else if (data.temp >= 40) {
+      parts.push('温度过高(' + data.temp.toFixed(1) + '°C)');
+    }
+
+    if (data.humi >= 80 && targetMode < 2) {
+      if (targetMode < 1) targetMode = 1;
+      parts.push('湿度过高(' + data.humi.toFixed(1) + '%)');
+    }
+    if (data.humi <= 20 && targetMode < 2) {
+      if (targetMode < 1) targetMode = 1;
+      parts.push('湿度过低(' + data.humi.toFixed(1) + '%)');
+    }
+
+    const smokeDelta: number = data.smoke - this.prevSmoke;
+    if (smokeDelta >= 50 && targetMode < 2) {
+      if (targetMode < 1) targetMode = 1;
+      parts.push('烟雾突增(+' + smokeDelta.toFixed(1) + ')');
+    }
+
+    if (data.smoke >= 50 || data.temp >= 35) {
+      parts.push('数值偏高');
+    }
+    if (data.humi >= 70 || data.humi <= 30) {
+      parts.push('湿度异常(' + data.humi.toFixed(1) + '%)');
+    }
+    // 撤防时红外仅记录，布防时已上报入侵
+    if (!this.isArmed && data.ir) {
+      parts.push('有人活动');
+    }
+
+    this.prevSmoke = data.smoke;
+
+    const reason: string = parts.length > 0 ? parts.join(' | ') : '正常';
     const labels: string[] = ['正常', '警告', '报警'];
     if (targetMode !== this.getAlarmValue() || this.alarmLog === '--') {
       this.alarmMode = labels[targetMode] || '正常';
-      this.alarmLog = reason !== '' ? reason : '正常';
+      this.alarmLog = reason;
       SensorManager.setAlarmMode(targetMode);
       const logLevel: string = targetMode >= 2 ? 'error' : (targetMode >= 1 ? 'warn' : 'info');
-      LogStore.add('报警状态: ' + this.alarmMode + (reason !== '' ? ' (' + reason + ')' : ''), logLevel);
+      LogStore.add('报警状态: ' + this.alarmMode + ' (' + reason + ')', logLevel);
     }
   }
 
@@ -277,6 +323,11 @@ struct Index {
   dismissAlarm(): void {
     this.setAlarmMode(0, '手动');
     LogStore.add('警报已手动撤销');
+  }
+
+  toggleArm(): void {
+    this.isArmed = !this.isArmed;
+    LogStore.add(this.isArmed ? '红外布防已开启' : '红外布防已关闭', this.isArmed ? 'warn' : 'info');
   }
 
   // ---- 构建UI ----
@@ -348,6 +399,7 @@ struct Index {
             .backgroundColor('#F5F8FF')
             .borderRadius(8)
             .alignItems(HorizontalAlign.Center)
+            .onClick(() => { this.openSettings(); })
           }
           .width('100%')
 
@@ -439,10 +491,14 @@ struct Index {
                 Text('红外')
                   .fontSize(13)
                   .fontColor('#888888')
+                Text(this.isArmed ? '🔒 已布防' : '🔓 已撤防')
+                  .fontSize(11)
+                  .fontColor(this.isArmed ? '#E74C3C' : '#95A5A6')
+                  .onClick(() => { this.toggleArm(); })
               }
               .layoutWeight(1)
               .padding(12)
-              .backgroundColor('#FFF8E7')
+              .backgroundColor(this.isArmed ? '#FFE0E0' : '#FFF8E7')
               .borderRadius(10)
               .alignItems(HorizontalAlign.Center)
               .onClick(() => { this.refreshIr(); })
@@ -483,6 +539,13 @@ struct Index {
               Text(this.alarmLog)
                 .fontSize(12)
                 .fontColor('#888888')
+            }
+            .width('100%')
+
+            Row() {
+              Text(this.isArmed ? '🔒 红外已布防' : '🔓 红外已撤防')
+                .fontSize(12)
+                .fontColor(this.isArmed ? '#E74C3C' : '#95A5A6')
             }
             .width('100%')
           }
