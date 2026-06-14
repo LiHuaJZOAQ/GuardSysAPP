@@ -1,15 +1,21 @@
-export class LogStore {
-  private static messages: string[] = [];
+export interface LogItem {
+  text: string;
+  level: string;
+}
 
-  static add(msg: string): void {
+export class LogStore {
+  private static messages: LogItem[] = [];
+
+  static add(msg: string, level: string = 'info'): void {
     const time: string = new Date().toLocaleTimeString();
-    LogStore.messages.push('[' + time + '] ' + msg);
+    const item: LogItem = { text: '[' + time + '] ' + msg, level: level };
+    LogStore.messages.push(item);
     if (LogStore.messages.length > 200) {
       LogStore.messages.shift();
     }
   }
 
-  static getAll(): string[] {
+  static getAll(): LogItem[] {
     return LogStore.messages;
   }
 

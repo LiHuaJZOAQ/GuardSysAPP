@@ -1,10 +1,10 @@
-import { LogStore } from './LogStore';
+import { LogStore, LogItem } from './LogStore';
 import router from '@ohos.router';
 
 @Entry
 @Component
 struct LogPage {
-  @State logMessages: string[] = [];
+  @State logMessages: LogItem[] = [];
   private refreshTimer: number = -1;
 
   aboutToAppear(): void {
@@ -28,6 +28,16 @@ struct LogPage {
   clearLog(): void {
     LogStore.clear();
     this.logMessages = [];
+  }
+
+  getLevelColor(level: string): string {
+    if (level === 'error') {
+      return '#E74C3C';
+    }
+    if (level === 'warn') {
+      return '#F39C12';
+    }
+    return '#333333';
   }
 
   build() {
@@ -55,11 +65,11 @@ struct LogPage {
 
       // 日志列表
       List({ space: 3 }) {
-        ForEach(this.logMessages, (item: string) => {
+        ForEach(this.logMessages, (item: LogItem) => {
           ListItem() {
-            Text(item)
+            Text(item.text)
               .fontSize(12)
-              .fontColor('#333333')
+              .fontColor(this.getLevelColor(item.level))
               .align(Alignment.Start)
               .width('100%')
               .padding({ left: 8, right: 8, top: 4, bottom: 4 })

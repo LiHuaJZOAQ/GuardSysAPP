@@ -1,7 +1,8 @@
-import { SensorManager, SensorData } from './SensorManager';
+import { SensorManager, SensorData, Sht30Data, Mq2Data, IrData } from './SensorManager';
 import { defaultTcpClient } from './TCPClient';
 import { WifiManagerHelper } from './WifiManager';
 import { LogStore } from './LogStore';
+import { SharedConfig } from './SharedConfig';
 import router from '@ohos.router';
 
 interface ServerCommand {
@@ -25,7 +26,6 @@ struct Index {
   @State humi: string = '--';
   @State smoke: string = '--';
   @State ir: string = '--';
-  @State isCollecting: boolean = false;
   @State sensorError: string = '';
   private refreshTimerId: number = -1;
 
@@ -41,7 +41,7 @@ struct Index {
       this.alarmLog = '绿灯已初始化';
       LogStore.add('报警初始化：绿灯');
     } catch (e) {
-      LogStore.add('报警初始化失败: ' + e);
+      LogStore.add('报警初始化失败: ' + e, 'warn');
     }
 
     // 监听 TCP 状态变化
@@ -51,10 +51,10 @@ struct Index {
     };
     defaultTcpClient.onCloseCallback = () => {
       this.tcpStatus = '已断开';
-      LogStore.add('服务器连接已断开');
+      LogStore.add('服务器连接已断开', 'warn');
     };
     defaultTcpClient.onErrorCallback = (err: string) => {
-      LogStore.add('连接错误: ' + err);
+      LogStore.add('连接错误: ' + err, 'error');
       this.tcpStatus = '连接失败';
     };
     defaultTcpClient.onMessageCallback = (msg: string) => {
@@ -62,10 +62,12 @@ struct Index {
     };
 
     this.collectAll();
-    this.refreshTimerId = setInterval(() => {
-      this.collectAll(true);
-    }, 1000);
+    this.startAutoRefresh();
     await this.updateStatus();
+  }
+
+  onPageShow(): void {
+    this.startAutoRefresh();
   }
 
   aboutToDisappear(): void {
@@ -74,6 +76,15 @@ struct Index {
       this.refreshTimerId = -1;
     }
     defaultTcpClient.release();
+  }
+
+  startAutoRefresh(): void {
+    if (this.refreshTimerId !== -1) {
+      clearInterval(this.refreshTimerId);
+    }
+    this.refreshTimerId = setInterval(() => {
+      this.collectAll(true);
+    }, SharedConfig.refreshInterval);
   }
 
   // ---- 状态更新 ----
@@ -105,7 +116,7 @@ struct Index {
       const cmd: ServerCommand = JSON.parse(msg) as ServerCommand;
       if (cmd.type === 'cmd') {
         if (cmd.action === 'setAlarm') {
-          this.setAlarmMode(cmd.value as number);
+          this.setAlarmMode(cmd.value as number, '远程');
         } else if (cmd.action === 'collect') {
           this.collectAll();
         }
@@ -118,8 +129,6 @@ struct Index {
   // ---- 传感器数据采集 ----
 
   async collectAll(silent: boolean = false): Promise<void> {
-    if (this.isCollecting) return;
-    this.isCollecting = true;
     try {
       const data: SensorData = await SensorManager.getAllData();
       this.temp = data.temp.toFixed(1);
@@ -134,10 +143,61 @@ struct Index {
     } catch (e) {
       this.sensorError = '采集失败: ' + e;
       if (!silent) {
-        LogStore.add('采集失败: ' + e);
+        LogStore.add('采集失败: ' + e, 'error');
       }
     }
-    this.isCollecting = false;
+  }
+
+  async refreshSht30(): Promise<void> {
+    try {
+      const data: Sht30Data = await SensorManager.getSht30Data();
+      this.temp = data.temp.toFixed(1);
+      this.humi = data.humi.toFixed(1);
+      this.sensorError = '';
+      this.checkAlarmThresholdFromState();
+      LogStore.add('温湿度已刷新: ' + this.temp + '°C ' + this.humi + '%');
+    } catch (e) {
+      this.sensorError = '温湿度刷新失败: ' + e;
+      LogStore.add('温湿度刷新失败: ' + e, 'error');
+    }
+  }
+
+  async refreshSmoke(): Promise<void> {
+    try {
+      const data: Mq2Data = await SensorManager.getMq2Data();
+      this.smoke = data.smoke.toFixed(2);
+      this.sensorError = '';
+      this.checkAlarmThresholdFromState();
+      LogStore.add('烟雾已刷新: ' + this.smoke);
+    } catch (e) {
+      this.sensorError = '烟雾刷新失败: ' + e;
+      LogStore.add('烟雾刷新失败: ' + e, 'error');
+    }
+  }
+
+  async refreshIr(): Promise<void> {
+    try {
+      const data: IrData = await SensorManager.getIrData();
+      this.ir = data.ir ? '有人' : '无人';
+      this.sensorError = '';
+      LogStore.add('红外已刷新: ' + this.ir);
+    } catch (e) {
+      this.sensorError = '红外刷新失败: ' + e;
+      LogStore.add('红外刷新失败: ' + e, 'error');
+    }
+  }
+
+  checkAlarmThresholdFromState(): void {
+    const tempVal: number = parseFloat(this.temp);
+    const humiVal: number = parseFloat(this.humi);
+    const smokeVal: number = parseFloat(this.smoke);
+    const data: SensorData = {
+      temp: isNaN(tempVal) ? 0 : tempVal,
+      humi: isNaN(humiVal) ? 0 : humiVal,
+      smoke: isNaN(smokeVal) ? 0 : smokeVal,
+      ir: this.ir === '有人'
+    };
+    this.checkAlarmThreshold(data);
   }
 
   getAlarmValue(): number {
@@ -167,22 +227,30 @@ struct Index {
       this.alarmMode = labels[targetMode] || '正常';
       this.alarmLog = reason !== '' ? reason : '正常';
       SensorManager.setAlarmMode(targetMode);
-      LogStore.add('报警状态: ' + this.alarmMode + (reason !== '' ? ' (' + reason + ')' : ''));
+      const logLevel: string = targetMode >= 2 ? 'error' : (targetMode >= 1 ? 'warn' : 'info');
+      LogStore.add('报警状态: ' + this.alarmMode + (reason !== '' ? ' (' + reason + ')' : ''), logLevel);
     }
   }
 
   // ---- 报警控制 ----
 
-  async setAlarmMode(mode: number): Promise<void> {
+  async setAlarmMode(mode: number, source: string = ''): Promise<void> {
     try {
       await SensorManager.setAlarmMode(mode);
       const labels: string[] = ['正常', '警告', '报警'];
       this.alarmMode = labels[mode] || '未知';
       this.alarmLog = '已设为' + this.alarmMode;
-      LogStore.add('报警已设为: ' + this.alarmMode);
+      const src: string = source !== '' ? ' (' + source + ')' : '';
+      const logLevel: string = mode >= 2 ? 'error' : (mode >= 1 ? 'warn' : 'info');
+      LogStore.add('报警已设为: ' + this.alarmMode + src, logLevel);
     } catch (e) {
-      LogStore.add('报警设置失败: ' + e);
+      LogStore.add('报警设置失败: ' + e, 'error');
     }
+  }
+
+  dismissAlarm(): void {
+    this.setAlarmMode(0, '手动');
+    LogStore.add('警报已手动撤销');
   }
 
   // ---- 构建UI ----
@@ -258,12 +326,6 @@ struct Index {
               Text('📊 实时传感器数据')
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
-              Blank()
-              Button('手动采集')
-                .height(28)
-                .fontSize(12)
-                .enabled(!this.isCollecting)
-                .onClick(() => { this.collectAll(); })
             }
             .width('100%')
 
@@ -295,6 +357,7 @@ struct Index {
               .backgroundColor('#FFF5F5')
               .borderRadius(10)
               .alignItems(HorizontalAlign.Center)
+              .onClick(() => { this.refreshSht30(); })
 
               Column({ space: 4 }) {
                 Text('💧')
@@ -312,6 +375,7 @@ struct Index {
               .backgroundColor('#F0F8FF')
               .borderRadius(10)
               .alignItems(HorizontalAlign.Center)
+              .onClick(() => { this.refreshSht30(); })
             }
             .width('100%')
 
@@ -319,7 +383,7 @@ struct Index {
               Column({ space: 4 }) {
                 Text('💨')
                   .fontSize(28)
-                Text(this.smoke)
+                Text(this.smoke + 'ppm')
                   .fontSize(22)
                   .fontWeight(FontWeight.Bold)
                   .fontColor(this.smoke !== '--' && parseInt(this.smoke) > 100 ? '#E74C3C' : '#2ECC71')
@@ -332,6 +396,7 @@ struct Index {
               .backgroundColor('#F0FFF0')
               .borderRadius(10)
               .alignItems(HorizontalAlign.Center)
+              .onClick(() => { this.refreshSmoke(); })
 
               Column({ space: 4 }) {
                 Text('🚶')
@@ -349,6 +414,7 @@ struct Index {
               .backgroundColor('#FFF8E7')
               .borderRadius(10)
               .alignItems(HorizontalAlign.Center)
+              .onClick(() => { this.refreshIr(); })
             }
             .width('100%')
           }
@@ -357,18 +423,21 @@ struct Index {
           .backgroundColor('#FAFAFA')
           .borderRadius(10)
 
-          // ---- 报警状态（仅显示） ----
+          // ---- 报警状态 ----
           Column({ space: 8 }) {
             Row() {
               Text('🚨 报警状态')
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
               Blank()
-              Text(this.alarmMode)
-                .fontSize(16)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(this.alarmMode === '正常' ? '#2ECC71' :
-                  this.alarmMode === '警告' ? '#F39C12' : '#E74C3C')
+              if (this.alarmMode !== '正常' && this.alarmMode !== '--') {
+                Button('撤销警报')
+                  .height(28)
+                  .fontSize(12)
+                  .backgroundColor('#2ECC71')
+                  .fontColor('#FFFFFF')
+                  .onClick(() => { this.dismissAlarm(); })
+              }
             }
             .width('100%')
 

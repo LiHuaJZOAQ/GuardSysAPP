@@ -2,6 +2,7 @@ import { SensorManager, SensorData } from './SensorManager';
 import { defaultTcpClient } from './TCPClient';
 import { WifiManagerHelper, WifiDeviceInfo } from './WifiManager';
 import { LogStore } from './LogStore';
+import { SharedConfig } from './SharedConfig';
 import abilityAccessCtrl from '@ohos.abilityAccessCtrl';
 import router from '@ohos.router';
 
@@ -26,6 +27,9 @@ struct SettingsPage {
   @State autoReport: boolean = true;
   @State reportInterval: number = 1;
   private timerId: number = -1;
+
+  // 传感器刷新频率
+  @State refreshIntervalSec: string = (SharedConfig.refreshInterval / 1000).toString();
 
   aboutToAppear(): void {
     this.updateStatus();
@@ -85,13 +89,13 @@ struct SettingsPage {
       this.tcpStatus = '已断开';
       this.isConnecting = false;
       this.stopAutoReport();
-      LogStore.add('服务器连接已断开');
+      LogStore.add('服务器连接已断开', 'warn');
     };
 
     defaultTcpClient.onErrorCallback = (err: string) => {
       this.tcpStatus = '连接失败';
       this.isConnecting = false;
-      LogStore.add('连接错误: ' + err);
+      LogStore.add('连接错误: ' + err, 'error');
     };
 
     await defaultTcpClient.connectServer(this.serverHost, port);
@@ -158,7 +162,7 @@ struct SettingsPage {
   startAutoReport(): void {
     if (this.autoReport) return;
     if (this.tcpStatus !== '已连接') {
-      LogStore.add('自动上报：服务器未连接');
+      LogStore.add('自动上报：服务器未连接', 'warn');
       return;
     }
     this.autoReport = true;
@@ -190,7 +194,7 @@ struct SettingsPage {
       });
       await defaultTcpClient.sendMessage(payload);
     } catch (e) {
-      LogStore.add('上报失败: ' + e);
+      LogStore.add('上报失败: ' + e, 'error');
     }
 
     if (this.autoReport) {
@@ -206,9 +210,10 @@ struct SettingsPage {
     try {
       await SensorManager.setAlarmMode(mode);
       const labels: string[] = ['正常', '警告', '报警'];
-      LogStore.add('报警手动设为: ' + (labels[mode] || '未知'));
+      const logLevel: string = mode >= 2 ? 'error' : (mode >= 1 ? 'warn' : 'info');
+      LogStore.add('报警手动设为: ' + (labels[mode] || '未知') + ' (调试)', logLevel);
     } catch (e) {
-      LogStore.add('报警设置失败: ' + e);
+      LogStore.add('报警设置失败: ' + e, 'error');
     }
   }
 
@@ -405,6 +410,40 @@ struct SettingsPage {
           .width('100%')
           .padding(12)
           .backgroundColor('#FFFBF0')
+          .borderRadius(10)
+
+          // ---- 传感器设置 ----
+          Column({ space: 8 }) {
+            Row() {
+              Text('📟 传感器设置')
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+            }
+            .width('100%')
+
+            Row({ space: 8 }) {
+              Text('刷新间隔:')
+                .fontSize(14)
+              TextInput({ text: this.refreshIntervalSec, placeholder: '秒' })
+                .width(60)
+                .height(32)
+                .fontSize(14)
+                .onChange((v: string) => {
+                  const n: number = parseInt(v);
+                  if (n > 0) {
+                    this.refreshIntervalSec = n.toString();
+                    SharedConfig.refreshInterval = n * 1000;
+                    LogStore.add('传感器刷新间隔设为 ' + n + ' 秒');
+                  }
+                })
+              Text('秒')
+                .fontSize(14)
+              Blank()
+            }
+          }
+          .width('100%')
+          .padding(12)
+          .backgroundColor('#F5FFF5')
           .borderRadius(10)
 
           // ---- 调试 ----
