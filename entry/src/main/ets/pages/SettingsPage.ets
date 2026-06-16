@@ -98,6 +98,14 @@ struct SettingsPage {
     this.tcpStatus = '连接中...';
     LogStore.add('正在连接 ' + this.serverHost + ':' + port + ' ...');
 
+    const mac: string = WifiManagerHelper.getDeviceMac();
+    if (mac) {
+      defaultTcpClient.deviceId = mac;
+      LogStore.add('设备MAC: ' + mac);
+    } else {
+      LogStore.add('无法获取MAC地址，使用IP作为设备标识', 'warn');
+    }
+
     defaultTcpClient.onConnectCallback = () => {
       this.tcpStatus = '已连接';
       this.isConnecting = false;
@@ -180,7 +188,9 @@ struct SettingsPage {
   }
 
   startAutoReport(): void {
-    if (this.autoReport) return;
+    if (this.timerId !== -1) {
+      return;
+    }
     if (this.tcpStatus !== '已连接') {
       LogStore.add('自动上报：服务器未连接', 'warn');
       return;
@@ -225,6 +235,7 @@ struct SettingsPage {
   }
 
   // ---- 调试 ----
+  @State buzzerOn: boolean = false;
 
   async setAlarmMode(mode: number): Promise<void> {
     try {
@@ -234,6 +245,21 @@ struct SettingsPage {
       LogStore.add('报警手动设为: ' + (labels[mode] || '未知') + ' (调试)', logLevel);
     } catch (e) {
       LogStore.add('报警设置失败: ' + e, 'error');
+    }
+  }
+
+  async toggleBuzzer(): Promise<void> {
+    try {
+      this.buzzerOn = !this.buzzerOn;
+      if (this.buzzerOn) {
+        await SensorManager.setAlarmMode(2);
+        LogStore.add('蜂鸣器已开启（调试）', 'warn');
+      } else {
+        await SensorManager.setAlarmMode(SensorManager.currentAlarmMode);
+        LogStore.add('蜂鸣器已关闭（调试）');
+      }
+    } catch (e) {
+      LogStore.add('蜂鸣器控制失败: ' + e, 'error');
     }
   }
 
@@ -498,6 +524,20 @@ struct SettingsPage {
                 .fontSize(13)
                 .backgroundColor('#E74C3C')
                 .onClick(() => { this.setAlarmMode(2); })
+            }
+            .width('100%')
+
+            Row({ space: 10 }) {
+              Text('蜂鸣器:')
+                .fontSize(14)
+              Button(this.buzzerOn ? '关闭' : '开启')
+                .height(36)
+                .fontSize(13)
+                .backgroundColor(this.buzzerOn ? '#95A5A6' : '#E67E22')
+                .onClick(() => { this.toggleBuzzer(); })
+              Text(this.buzzerOn ? '🔊 蜂鸣中' : '🔇 已静音')
+                .fontSize(13)
+                .fontColor(this.buzzerOn ? '#E74C3C' : '#999999')
             }
             .width('100%')
           }
