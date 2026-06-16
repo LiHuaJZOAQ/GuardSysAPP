@@ -87,7 +87,6 @@ struct Index {
       clearInterval(this.refreshTimerId);
       this.refreshTimerId = -1;
     }
-    defaultTcpClient.release();
   }
 
   startAutoRefresh(): void {
