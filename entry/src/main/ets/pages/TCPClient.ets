@@ -101,10 +101,10 @@ export class TCPClient {
       }
     });
 
-    this.ws.on('message', (value: webSocket.WebSocketMessage) => {
+    this.ws.on('message', (err: Object, value: Object) => {
       let msg: string = '';
-      if (typeof value.message === 'string') {
-        msg = value.message as string;
+      if (typeof value === 'string') {
+        msg = value as string;
       }
       if (this.onMessageCallback) {
         this.onMessageCallback(msg);
