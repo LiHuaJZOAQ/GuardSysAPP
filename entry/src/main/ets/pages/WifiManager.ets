@@ -155,4 +155,15 @@ export class WifiManagerHelper {
       return '0.0.0.0';
     }
   }
+
+  // 获取设备MAC地址（用于设备唯一标识）
+  static getDeviceMac(): string {
+    try {
+      const mac: string = wifiManager.getDeviceMacAddress();
+      return mac;
+    } catch (e) {
+      console.error('getDeviceMac failed: ' + JSON.stringify(e));
+      return '';
+    }
+  }
 }

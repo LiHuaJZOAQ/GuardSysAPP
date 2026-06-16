@@ -14,6 +14,7 @@ export class TCPClient {
   public onMessageCallback?: (message: string) => void;
   public onCloseCallback?: () => void;
   public onErrorCallback?: (error: string) => void;
+  public deviceId: string = '';
 
   constructor() {
   }
@@ -96,6 +97,9 @@ export class TCPClient {
       this.isConnect = true;
       this.isConnecting = false;
       this.startHeartbeat();
+      if (this.deviceId) {
+        this.ws?.send(JSON.stringify({ type: 'register', mac: this.deviceId }) + '\n');
+      }
       if (this.onConnectCallback) {
         this.onConnectCallback();
       }
