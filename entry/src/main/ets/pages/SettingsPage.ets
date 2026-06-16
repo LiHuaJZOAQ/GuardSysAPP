@@ -29,7 +29,7 @@ struct SettingsPage {
   private timerId: number = -1;
 
   // 传感器刷新频率
-  @State refreshIntervalSec: string = (SharedConfig.refreshInterval / 1000).toString();
+  @State refreshIntervalMs: string = SharedConfig.refreshInterval.toString();
 
   aboutToAppear(): void {
     this.updateStatus();
@@ -444,19 +444,19 @@ struct SettingsPage {
             Row({ space: 8 }) {
               Text('刷新间隔:')
                 .fontSize(14)
-              TextInput({ text: this.refreshIntervalSec, placeholder: '秒' })
-                .width(60)
+              TextInput({ text: this.refreshIntervalMs, placeholder: 'ms' })
+                .width(70)
                 .height(32)
                 .fontSize(14)
                 .onChange((v: string) => {
                   const n: number = parseInt(v);
-                  if (n > 0) {
-                    this.refreshIntervalSec = n.toString();
-                    SharedConfig.refreshInterval = n * 1000;
-                    LogStore.add('传感器刷新间隔设为 ' + n + ' 秒');
+                  if (n >= 1) {
+                    this.refreshIntervalMs = n.toString();
+                    SharedConfig.refreshInterval = n;
+                    LogStore.add('传感器刷新间隔设为 ' + n + ' ms');
                   }
                 })
-              Text('秒')
+              Text('ms')
                 .fontSize(14)
               Blank()
             }
