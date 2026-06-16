@@ -83,7 +83,14 @@ struct SettingsPage {
     LogStore.add('--- 开始连接 ---');
     LogStore.add('目标: ' + this.serverHost + ':' + port + ' (WebSocket)');
     LogStore.add('WiFi: ' + this.wifiStatus + ', IP: ' + this.localIP);
-    const isIP: boolean = /^\d+\.\d+\.\d+\.\d+$/.test(this.serverHost);
+    const parts: string[] = this.serverHost.split('.');
+    let isIP: boolean = parts.length === 4;
+    for (let i: number = 0; i < 4 && isIP; i++) {
+      const n: number = Number(parts[i]);
+      if (isNaN(n) || n.toString() !== parts[i]) {
+        isIP = false;
+      }
+    }
     LogStore.add('地址类型: ' + (isIP ? 'IP地址' : '域名（需DNS解析）'));
     LogStore.add('连接模式: WebSocket, URL=' + (port === 443 ? 'wss' : 'ws') + '://' + this.serverHost + (port !== 443 ? ':' + port : '') + '/device');
 
