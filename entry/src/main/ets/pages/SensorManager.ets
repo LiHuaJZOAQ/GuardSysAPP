@@ -42,21 +42,34 @@ export class SensorManager {
   }
 
   static async getAllData(): Promise<SensorData> {
-    const all: Object = await Promise.all([
-      SensorManager.getSht30Data(),
-      SensorManager.getMq2Data(),
-      SensorManager.getIrData()
-    ]);
-    const list: Object[] = all as Object[];
-    const sht30: Sht30Data = list[0] as Sht30Data;
-    const mq2: Mq2Data = list[1] as Mq2Data;
-    const ir: IrData = list[2] as IrData;
-    const result: SensorData = {
-      temp: sht30.temp,
-      humi: sht30.humi,
-      smoke: mq2.smoke,
-      ir: ir.ir
-    };
+    let temp: number = 0;
+    let humi: number = 0;
+    let smoke: number = 0;
+    let ir: boolean = false;
+
+    try {
+      const sht30: Sht30Data = await SensorManager.getSht30Data();
+      temp = sht30.temp;
+      humi = sht30.humi;
+    } catch (e) {
+      console.error('getSht30Data failed: ' + JSON.stringify(e));
+    }
+
+    try {
+      const mq2: Mq2Data = await SensorManager.getMq2Data();
+      smoke = mq2.smoke;
+    } catch (e) {
+      console.error('getMq2Data failed: ' + JSON.stringify(e));
+    }
+
+    try {
+      const irData: IrData = await SensorManager.getIrData();
+      ir = irData.ir;
+    } catch (e) {
+      console.error('getIrData failed: ' + JSON.stringify(e));
+    }
+
+    const result: SensorData = { temp: temp, humi: humi, smoke: smoke, ir: ir };
     return result;
   }
 
