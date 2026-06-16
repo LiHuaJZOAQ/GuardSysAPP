@@ -35,6 +35,7 @@ struct Index {
   @State alarmMode: string = '--';
   @State alarmLog: string = '--';
   @State isArmed: boolean = false;
+  private irAlarmLatched: boolean = false;
   private prevSmoke: number = 0;
 
   async aboutToAppear(): Promise<void> {
@@ -157,23 +158,47 @@ struct Index {
   // ---- 传感器数据采集 ----
 
   async collectAll(silent: boolean = false): Promise<void> {
+    let errMsg: string = '';
+    let curTemp: number = 0;
+    let curHumi: number = 0;
+    let curSmoke: number = 0;
+    let curIr: boolean = false;
     try {
-      const data: SensorData = await SensorManager.getAllData();
-      this.temp = data.temp.toFixed(1);
-      this.humi = data.humi.toFixed(1);
-      this.smoke = data.smoke.toFixed(2);
-      this.ir = data.ir ? '有人' : '无人';
+      const sht30: Sht30Data = await SensorManager.getSht30Data();
+      curTemp = sht30.temp;
+      curHumi = sht30.humi;
+      this.temp = curTemp.toFixed(1);
+      this.humi = curHumi.toFixed(1);
+    } catch (e) {
+      errMsg = '温湿度采集失败';
+    }
+    try {
+      const mq2: Mq2Data = await SensorManager.getMq2Data();
+      curSmoke = mq2.smoke;
+      this.smoke = curSmoke.toFixed(2);
+    } catch (e) {
+      errMsg = (errMsg ? errMsg + '; ' : '') + '烟雾采集失败';
+    }
+    try {
+      const irData: IrData = await SensorManager.getIrData();
+      curIr = irData.ir;
+      this.ir = curIr ? '有人' : '无人';
+    } catch (e) {
+      errMsg = (errMsg ? errMsg + '; ' : '') + '红外采集失败';
+    }
+    if (errMsg) {
+      this.sensorError = errMsg;
+      if (!silent) {
+        LogStore.add(errMsg, 'error');
+      }
+    } else {
       this.sensorError = '';
-      this.checkAlarmThreshold(data);
       if (!silent) {
         LogStore.add('采集完成: ' + this.temp + '°C ' + this.humi + '% 烟雾=' + this.smoke + ' 红外=' + this.ir);
       }
-    } catch (e) {
-      this.sensorError = '采集失败: ' + e;
-      if (!silent) {
-        LogStore.add('采集失败: ' + e, 'error');
-      }
     }
+    const alarmData: SensorData = { temp: curTemp, humi: curHumi, smoke: curSmoke, ir: curIr };
+    this.checkAlarmThreshold(alarmData);
   }
 
   async refreshSht30(): Promise<void> {
@@ -239,10 +264,15 @@ struct Index {
     let targetMode: number = 0;
     const parts: string[] = [];
 
-    // 布防：红外有人直接触发报警
+    // 布防：红外有人直接触发报警（锁定，需手动撤销）
     if (this.isArmed && data.ir) {
       if (targetMode < 2) targetMode = 2;
+      this.irAlarmLatched = true;
       parts.push('布防报警: 有人入侵');
+    }
+    // 红外布防报警锁定：阻止自动降级
+    if (this.irAlarmLatched && targetMode < 2) {
+      targetMode = 2;
     }
 
     if (data.smoke >= 200) {
@@ -321,12 +351,16 @@ struct Index {
   }
 
   dismissAlarm(): void {
+    this.irAlarmLatched = false;
     this.setAlarmMode(0, '手动');
     LogStore.add('警报已手动撤销');
   }
 
   toggleArm(): void {
     this.isArmed = !this.isArmed;
+    if (!this.isArmed) {
+      this.irAlarmLatched = false;
+    }
     LogStore.add(this.isArmed ? '红外布防已开启' : '红外布防已关闭', this.isArmed ? 'warn' : 'info');
   }
 
