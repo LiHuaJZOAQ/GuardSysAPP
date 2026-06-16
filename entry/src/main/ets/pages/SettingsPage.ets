@@ -98,12 +98,12 @@ struct SettingsPage {
     this.tcpStatus = '连接中...';
     LogStore.add('正在连接 ' + this.serverHost + ':' + port + ' ...');
 
-    const mac: string = WifiManagerHelper.getDeviceMac();
+    const mac: string = await WifiManagerHelper.getDeviceMac();
     if (mac) {
       defaultTcpClient.deviceId = mac;
-      LogStore.add('设备MAC: ' + mac);
+      LogStore.add('设备ID: ' + mac);
     } else {
-      LogStore.add('无法获取MAC地址，使用IP作为设备标识', 'warn');
+      LogStore.add('无法获取设备标识，使用IP作为设备ID', 'warn');
     }
 
     defaultTcpClient.onConnectCallback = () => {

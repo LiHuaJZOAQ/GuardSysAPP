@@ -1,4 +1,5 @@
 import wifiManager from '@ohos.wifiManager';
+import deviceInfo from '@ohos.deviceInfo';
 
 // WiFi设备信息接口
 export interface WifiDeviceInfo {
@@ -156,14 +157,25 @@ export class WifiManagerHelper {
     }
   }
 
-  // 获取设备MAC地址（用于设备唯一标识）
-  static getDeviceMac(): string {
+  // 获取设备唯一标识（序列号，用于设备 ID）
+  static async getDeviceMac(): Promise<string> {
     try {
-      const mac: string = wifiManager.getDeviceMacAddress();
-      return mac;
+      const serial: string = deviceInfo.serial;
+      if (serial && serial !== '') {
+        return serial;
+      }
     } catch (e) {
-      console.error('getDeviceMac failed: ' + JSON.stringify(e));
-      return '';
+      console.error('deviceInfo.serial failed: ' + JSON.stringify(e));
     }
+    // fallback: 使用WiFi MAC地址
+    try {
+      const info: wifiManager.WifiLinkedInfo = await wifiManager.getLinkedInfo();
+      if (info.macAddress && info.macAddress !== '') {
+        return info.macAddress;
+      }
+    } catch (e) {
+      console.error('getLinkedInfo.macAddress failed: ' + JSON.stringify(e));
+    }
+    return '';
   }
 }
