@@ -1,7 +1,6 @@
 # GuardSysAPP — OpenHarmony 北向监控系统
 
-基于 OpenHarmony 4.0（九联开发板）的物联网北向监控系统，通过 NAPI 采集传感器数据，经 TCP 上报云服务器，支持 Web 端实时查看与控制。
-
+基于 OpenHarmony 4.0（九联开发板）的物联网北向监控系统，通过 NAPI 采集传感器数据，经 **WebSocket** 上报云服务器，支持 Web 端实时查看与控制。
 
 ## 功能
 
@@ -9,14 +8,19 @@
 - **SHT30** — 温度 + 湿度（I2C GPIO 5, 0x44）
 - **MQ-2** — 烟雾浓度（GPIO 1）
 - **HC-SR501** — 红外人体检测（GPIO 9），支持布防/撤防模式
-- 三传感器通过 `Promise.all` 并行读取，互不干扰
+- 三传感器 **逐个 await + try-catch** 读取，单传感器失败用默认值继续（不整批丢失）
 - 点击传感器卡片单独刷新对应传感器数据
 - 采集失败时仪表板显示红色错误横幅
 
 ### 网络通信
 - **WiFi 管理** — 扫描可用 WiFi、连接/断开、显示信号强度与 IP（API 10 适配：`addCandidateConfig` / `connectToCandidateConfig`）
-- **TCP 客户端** — 连接云服务器（支持域名），30s 心跳保活，断线 5s 自动重连
-- **协议** — JSON + `\n` 分隔，服务器 ACK `{"success":true}`
+- **WebSocket 客户端**（`@ohos.net.webSocket`）— 连接云服务器（支持域名），自动发送注册消息（MAC/序列号），30s 心跳保活，断线 5s 自动重连，发送失败主动重连
+- **协议** — JSON WebSocket 帧，服务器 ACK `{"success":true}`
+
+### 自动上报
+- 数据上报与页面无关：**Index 页面的 `collectAll()` 每次采集后自动发送**，SettingsPage 的独立 `runReportCycle()` 作为补充
+- 无论用户处于哪个页面，只要 TCP（WebSocket）已连接就持续上报
+- 上报间隔跟随传感器刷新频率（默认 1s）
 
 ### 自动报警
 - 四级传感器联动检测：**烟雾(ppm)**、**温度(°C)**、**湿度(%)**、**红外(有人/无人)**
@@ -31,11 +35,6 @@
 - 布防状态在红外卡片和报警状态栏均有显示
 - **火险+人员未撤离**：无论布防/撤防，只要烟雾/温度超标且检测到有人，自动升级为报警
 
-### 自动上报
-- 定时循环上报传感器数据（`temp`/`humi`/`smoke`/`ir`/`alarm`）
-- 上报间隔可配（设置页，默认 1s）
-- 通过 `SharedConfig` 全局配置单例管理
-
 ### 实时刷新
 - 每秒自动刷新传感器数据
 - 返回仪表板时自动重启定时器并读取最新配置（`onPageShow`）
@@ -44,7 +43,6 @@
 - **LogStore 单例**：全局共享日志消息
 - **三级分色**：error（红）、warn（黄）、info（黑）
 - **独立日志页**：500ms 自动刷新，按等级着色渲染
-- 报警原因标记 + 错误标 error 等级
 
 ### 命令控制
 - 服务器通过 JSON 指令触发：
@@ -53,18 +51,19 @@
 
 ### 设备初始化
 - 启动时自动点亮绿灯（`SensorManager.initAlarm()`），指示系统正常运行
+- `aboutToAppear` 自动连接 WebSocket
 
 ## 项目结构
 
 ```
 entry/src/main/ets/
 ├── pages/
-│   ├── Index.ets              # 仪表板：传感器卡片/报警状态/网络状态/导航
-│   ├── SettingsPage.ets        # 设置页：WiFi/TCP/自动上报/刷新间隔/调试
+│   ├── Index.ets              # 仪表板：传感器卡片/报警状态/网络状态/导航 + 自动上报
+│   ├── SettingsPage.ets        # 设置页：WiFi/TCP/自动上报/刷新间隔/调试报警/蜂鸣器
 │   ├── LogPage.ets             # 日志查看页（三级分色）
-│   ├── SensorManager.ets       # NAPI 传感器接口封装
-│   ├── TCPClient.ets           # TCP Socket 客户端（心跳+重连）
-│   ├── WifiManager.ets         # WiFi 扫描/连接（API 10）
+│   ├── SensorManager.ets       # NAPI 传感器接口封装（逐个采集+默认值）
+│   ├── TCPClient.ets           # WebSocket 客户端（@ohos.net.webSocket，注册+心跳+重连）
+│   ├── WifiManager.ets         # WiFi 扫描/连接（API 10）+ 设备 ID/信号强度获取
 │   ├── SharedConfig.ets        # 全局配置单例（refreshInterval）
 │   ├── LogStore.ets            # 日志单例（LogItem 三级分色）
 │   ├── PriSensorData.ets       # NAPI 原始测试页（保留）
@@ -77,12 +76,12 @@ entry/src/main/ets/
 
 | 文件 | 职责 |
 |------|------|
-| `Index.ets` | 仪表板：4 传感器卡片（点击单独刷新，红外含布防/撤防切换）、报警状态（含撤销按钮+红外布防显示）、网络状态指示器、导航到设置/日志 |
-| `SettingsPage.ets` | WiFi 扫描/连接、TCP 服务器配置/连接/断开、自动上报开关与间隔、传感器刷新间隔、调试报警按钮 |
+| `Index.ets` | 仪表板：4 传感器卡片（点击单独刷新，红外含布防/撤防切换）、报警状态（含撤销按钮+红外布防显示）、网络状态指示器、导航到设置/日志；**每 1s 采集数据并自动通过 WebSocket 上报** |
+| `SettingsPage.ets` | WiFi 扫描/连接、WebSocket 服务器配置/连接/断开、自动上报开关与间隔、传感器刷新间隔、调试报警/蜂鸣器控制 |
 | `LogPage.ets` | 从 LogStore 读取日志，按 level 着色渲染，500ms 轮询 |
-| `SensorManager.ets` | NAPI 封装 + `currentAlarmMode` 静态属性 + `setAlarmMode()` 自动更新 |
-| `TCPClient.ets` | `defaultTcpClient` 单例，30s 心跳，5s 重连，域名支持 |
-| `WifiManager.ets` | API 10 WiFi 适配 |
+| `SensorManager.ets` | NAPI 封装 + `currentAlarmMode` 静态属性 + `setAlarmMode()` 自动更新；`getAllData()` 逐个 await 单传感器失败不影响其他 |
+| `TCPClient.ets` | `defaultTcpClient` 单例，`@ohos.net.webSocket` 实现，自动注册 MAC/序列号，30s 心跳，5s 重连，发送失败主动断开+重连 |
+| `WifiManager.ets` | API 10 WiFi 适配 + `getDeviceMac()`（获取序列号用于注册）+ `getRssi()` 信号强度 |
 | `SharedConfig.ets` | `refreshInterval` 全局配置 |
 | `LogStore.ets` | `LogItem`（text + level）+ `addLog` / `getLogs` |
 
@@ -140,7 +139,24 @@ entry/src/main/ets/
 
 ## 服务器协议
 
-### 上报数据格式（开发板 → 服务器）
+### 连接
+
+设备通过 WebSocket 连接服务器，URL 格式：
+
+```
+wss://host/device       (端口 443)
+ws://host:port/device   (其他端口)
+```
+
+### 设备注册
+
+连接建立后自动发送注册消息，将 MAC/序列号注册为设备 ID：
+
+```json
+{"type":"register","mac":"1234567890"}
+```
+
+### 数据上报
 
 ```json
 {
@@ -149,11 +165,22 @@ entry/src/main/ets/
   "humi": "60.1",
   "smoke": 12.34,
   "ir": true,
-  "alarm": 0
+  "alarm": 0,
+  "rssi": -34
 }
 ```
 
-### 控制指令格式（服务器 → 开发板）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | 固定 `"report"` |
+| `temp` | string | 温度（如 `"25.3"`） |
+| `humi` | string | 湿度（如 `"60.1"`） |
+| `smoke` | number | 烟雾浓度（ppm） |
+| `ir` | bool | 红外有人 `true`/`false` |
+| `alarm` | number | 报警模式：0=正常，1=警告，2=报警 |
+| `rssi` | number | WiFi 信号强度（dBm，可选） |
+
+### 控制指令（服务器 → 开发板）
 
 ```json
 {
@@ -174,16 +201,23 @@ entry/src/main/ets/
 {"type":"ping"}
 ```
 
-- 开发板每 30s 发送一次，服务器无需回复
+- 开发板每 30s 发送一次
+- 服务器回复 `{"type":"pong"}` 并更新 `last_seen`
 
 ## API 10 适配说明
 
-本项目适配 OpenHarmony API 10 的 WiFi API 变更：
+本项目适配 OpenHarmony API 10 的以下变更：
 
+### WiFi API
 - `addDeviceConfig` → `addCandidateConfig`
 - `connectToDevice` → `connectToCandidateConfig`
 - `signalLevel` 改为基于 `rssi` 手动计算
 - 连接状态通过 `getLinkedInfo().ssid` 对比判断
+- `getDeviceMacAddress()` 已移除，改用 `@ohos.deviceInfo.serial`
+
+### WebSocket API
+- `@ohos.net.webSocket` 替代 `@ohos.net.socket.TCPSocket`
+- `on('message')` 回调签名为 `AsyncCallback<string|ArrayBuffer>`，即 `(err: Object, value: Object) => void`
 
 ## 权限说明
 
@@ -191,7 +225,7 @@ entry/src/main/ets/
 
 | 权限 | 类型 | 用途 |
 |------|------|------|
-| `ohos.permission.INTERNET` | system_grant | TCP 网络通信 |
+| `ohos.permission.INTERNET` | system_grant | WebSocket 网络通信 |
 | `ohos.permission.GET_WIFI_INFO` | system_grant | 获取 WiFi 信息 |
 | `ohos.permission.SET_WIFI_INFO` | system_grant | 配置 WiFi 连接 |
 | `ohos.permission.LOCATION` | user_grant | WiFi 扫描 |
@@ -232,19 +266,21 @@ await guardsys_napi.setAlarmStatus(mode, {
 ```typescript
 // 文件: entry/src/main/ets/pages/SettingsPage.ets
 @State serverHost: string = 'guardsysserver.up.railway.app';
-@State serverPort: string = '3001';
+@State serverPort: string = '443';
 ```
+
+> 端口 443 → 自动使用 `wss://` 协议；其他端口 → `ws://`
 
 修改方式有两种：
 
 1. **直接修改代码**：改上述默认值，重新编译安装 HAP
 2. **运行时修改**：打开 App → 右下角"设置" → "📡 服务器连接" → 修改地址和端口 → 点击"连接"
 
-服务器要求运行 TCP 服务（默认端口 3001），协议详见上方"服务器协议"章节。
+设备通过 **WebSocket** 连接 `wss://域名/device`。
 
 ### 传感器刷新频率
 
-位置：**设置 → 📟 传感器设置 → 刷新间隔**（单位：秒，默认 1s）
+位置：**设置 → 📟 传感器设置 → 刷新间隔**（单位：ms，默认 1000ms）
 
 持久化存储在 `SharedConfig.ets` 中，重启后恢复为默认值。
 
