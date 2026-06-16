@@ -5,9 +5,9 @@
         "name": "default",
         "material": {
           "certpath": "C:/Users/GL021/.ohos/config/openharmony/default_TCPTest_XbwVMIKR8RU9K86_pnPDq6-2HWu-MW-qI2Ae4qXxBgY=.cer",
-          "storePassword": "0000001BE6B06D000F1CA21BD7C2B8553E292B1EC9F7F8FA85259D3DFAE87F54115D74D4B5A37EC08E2856",
+          "storePassword": "0000001BAD09E31EB77A126F01CE4D366295408E38407DEEB6E3F31DA1AEBE8F0202DE5F60A2A6522DB468",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B191B3E8C5600EB3B2E64BBF26BAC5434C04D42CF4DFD525BCE72528D90E0C6494627E4638E2FD7",
+          "keyPassword": "0000001B393A43CC32616BC47C068FBEA8EFCE1CEAA24CE23D1FF467882AB04EC67F8CEAD374B5FA0E6958",
           "profile": "C:/Users/GL021/.ohos/config/openharmony/default_TCPTest_XbwVMIKR8RU9K86_pnPDq6-2HWu-MW-qI2Ae4qXxBgY=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:/Users/GL021/.ohos/config/openharmony/default_TCPTest_XbwVMIKR8RU9K86_pnPDq6-2HWu-MW-qI2Ae4qXxBgY=.p12"
