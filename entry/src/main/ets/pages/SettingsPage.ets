@@ -214,13 +214,15 @@ struct SettingsPage {
 
     try {
       const data: SensorData = await SensorManager.getAllData();
+      const rssi: number = await WifiManagerHelper.getRssi();
       const payload: string = JSON.stringify({
         type: 'report',
         temp: data.temp.toFixed(1),
         humi: data.humi.toFixed(1),
         smoke: data.smoke,
         ir: data.ir,
-        alarm: SensorManager.currentAlarmMode
+        alarm: SensorManager.currentAlarmMode,
+        rssi: rssi
       });
       await defaultTcpClient.sendMessage(payload);
     } catch (e) {

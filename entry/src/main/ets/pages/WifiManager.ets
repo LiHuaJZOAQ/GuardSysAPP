@@ -178,4 +178,15 @@ export class WifiManagerHelper {
     }
     return '';
   }
+
+  // 获取当前 WiFi 信号强度 RSSI
+  static async getRssi(): Promise<number> {
+    try {
+      const info: wifiManager.WifiLinkedInfo = await wifiManager.getLinkedInfo();
+      return info.rssi;
+    } catch (e) {
+      console.error('getRssi failed: ' + JSON.stringify(e));
+      return 0;
+    }
+  }
 }
