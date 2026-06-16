@@ -10,7 +10,7 @@ import router from '@ohos.router';
 @Component
 struct SettingsPage {
   @State serverHost: string = 'guardsysserver.up.railway.app';
-  @State serverPort: string = '3001';
+  @State serverPort: string = '443';
   @State tcpStatus: string = '未连接';
   @State isConnecting: boolean = false;
 
@@ -70,16 +70,31 @@ struct SettingsPage {
 
   async connectServer(): Promise<void> {
     if (this.serverHost.trim() === '') {
+      LogStore.add('请输入服务器地址', 'warn');
       return;
     }
-    const port: number = parseInt(this.serverPort) || 3001;
+    const port: number = parseInt(this.serverPort) || 3000;
+    if (isNaN(port) || port <= 0 || port > 65535) {
+      LogStore.add('端口号无效: ' + this.serverPort, 'error');
+      return;
+    }
+
+    // 诊断信息
+    LogStore.add('--- 开始连接 ---');
+    LogStore.add('目标: ' + this.serverHost + ':' + port + ' (WebSocket)');
+    LogStore.add('WiFi: ' + this.wifiStatus + ', IP: ' + this.localIP);
+    const isIP: boolean = /^\d+\.\d+\.\d+\.\d+$/.test(this.serverHost);
+    LogStore.add('地址类型: ' + (isIP ? 'IP地址' : '域名（需DNS解析）'));
+    LogStore.add('连接模式: WebSocket, URL=' + (port === 443 ? 'wss' : 'ws') + '://' + this.serverHost + (port !== 443 ? ':' + port : '') + '/device');
+
     this.isConnecting = true;
     this.tcpStatus = '连接中...';
+    LogStore.add('正在连接 ' + this.serverHost + ':' + port + ' ...');
 
     defaultTcpClient.onConnectCallback = () => {
       this.tcpStatus = '已连接';
       this.isConnecting = false;
-      LogStore.add('服务器连接成功');
+      LogStore.add('连接成功: ' + this.serverHost + ':' + this.serverPort);
       if (this.autoReport) {
         this.startAutoReport();
       }
@@ -89,18 +104,16 @@ struct SettingsPage {
       this.tcpStatus = '已断开';
       this.isConnecting = false;
       this.stopAutoReport();
-      LogStore.add('服务器连接已断开', 'warn');
+      LogStore.add('连接已断开: ' + this.serverHost + ':' + this.serverPort, 'warn');
     };
 
     defaultTcpClient.onErrorCallback = (err: string) => {
       this.tcpStatus = '连接失败';
       this.isConnecting = false;
-      LogStore.add('连接错误: ' + err, 'error');
+      LogStore.add(err, 'error');
     };
 
     await defaultTcpClient.connectServer(this.serverHost, port);
-    this.updateStatus();
-    this.isConnecting = false;
   }
 
   disconnectServer(): void {
@@ -250,7 +263,7 @@ struct SettingsPage {
                 .enabled(!defaultTcpClient.isConnected())
                 .onChange((v: string) => { this.serverHost = v; })
 
-              TextInput({ text: this.serverPort, placeholder: '端口' })
+              TextInput({ text: this.serverPort, placeholder: '端口（本地:3000, 线上:443）' })
                 .width(70)
                 .height(36)
                 .fontSize(14)
