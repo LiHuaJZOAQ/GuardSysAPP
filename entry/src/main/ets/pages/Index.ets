@@ -73,6 +73,7 @@ struct Index {
   }
 
   onPageShow(): void {
+    this.updateStatus();
     this.startAutoRefresh();
     this.startClock();
   }
