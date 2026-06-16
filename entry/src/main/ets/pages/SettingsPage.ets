@@ -25,7 +25,7 @@ struct SettingsPage {
 
   // 自动上报
   @State autoReport: boolean = true;
-  @State reportInterval: number = 1;
+  @State reportInterval: number = 1000;
   private timerId: number = -1;
 
   // 传感器刷新频率
@@ -186,7 +186,7 @@ struct SettingsPage {
       return;
     }
     this.autoReport = true;
-    LogStore.add('自动上报已开启，间隔 ' + this.reportInterval + ' 秒');
+    LogStore.add('自动上报已开启，间隔 ' + this.reportInterval + ' ms');
     this.runReportCycle();
   }
 
@@ -220,7 +220,7 @@ struct SettingsPage {
     if (this.autoReport) {
       this.timerId = setTimeout(() => {
         this.runReportCycle();
-      }, this.reportInterval * 1000);
+      }, this.reportInterval);
     }
   }
 
@@ -410,16 +410,16 @@ struct SettingsPage {
             Row({ space: 8 }) {
               Text('间隔:')
                 .fontSize(14)
-              TextInput({ text: this.reportInterval.toString(), placeholder: '秒' })
-                .width(60)
+              TextInput({ text: this.reportInterval.toString(), placeholder: 'ms' })
+                .width(70)
                 .height(32)
                 .fontSize(14)
                 .enabled(!this.autoReport)
                 .onChange((v: string) => {
                   const n: number = parseInt(v);
-                  if (n > 0) this.reportInterval = n;
+                  if (n >= 1) this.reportInterval = n;
                 })
-              Text('秒')
+              Text('ms')
                 .fontSize(14)
               Blank()
               Text(this.autoReport ? '● 运行中' : '○ 已停止')
