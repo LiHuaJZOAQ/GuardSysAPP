@@ -199,6 +199,26 @@ struct Index {
     }
     const alarmData: SensorData = { temp: curTemp, humi: curHumi, smoke: curSmoke, ir: curIr };
     this.checkAlarmThreshold(alarmData);
+
+    if (defaultTcpClient.isConnected()) {
+      try {
+        const rssi: number = await WifiManagerHelper.getRssi();
+        const payload: string = JSON.stringify({
+          type: 'report',
+          temp: curTemp.toFixed(1),
+          humi: curHumi.toFixed(1),
+          smoke: curSmoke,
+          ir: curIr,
+          alarm: SensorManager.currentAlarmMode,
+          rssi: rssi
+        });
+        defaultTcpClient.sendMessage(payload);
+      } catch (e) {
+        if (!silent) {
+          LogStore.add('数据上报失败: ' + e, 'error');
+        }
+      }
+    }
   }
 
   async refreshSht30(): Promise<void> {

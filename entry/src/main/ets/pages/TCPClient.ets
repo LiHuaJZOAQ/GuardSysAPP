@@ -192,9 +192,13 @@ export class TCPClient {
     }
     try {
       await this.ws.send(message + '\n');
-      console.info('ws send ok');
     } catch (err) {
       console.error('ws send failed: ' + JSON.stringify(err));
+      this.isConnect = false;
+      this.closeWebSocket();
+      if (this.shouldReconnect) {
+        this.scheduleReconnect();
+      }
     }
   }
 
