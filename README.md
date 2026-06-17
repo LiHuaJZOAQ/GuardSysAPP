@@ -2,6 +2,16 @@
 
 基于 OpenHarmony 4.0（九联开发板）的物联网北向监控系统，通过 NAPI 采集传感器数据，经 **WebSocket** 上报云服务器，支持 Web 端实时查看与控制。
 
+> [!TIP]
+> 
+> 本项目是智能家居安防系统 (https://github.com/LiHuaJZOAQ/GuardSystem) 的一个组成部分
+>
+> 下面是安防系统的其他组成项目
+> 
+> - 设备端Openharmony南向项目(https://github.com/LiHuaJZOAQ/GuardSys)
+>
+> - 服务端Web项目(https://github.com/LiHuaJZOAQ/GuardSysServer)
+
 ## 功能
 
 ### 传感器采集
