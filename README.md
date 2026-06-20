@@ -290,7 +290,7 @@ await guardsys_napi.setAlarmStatus(mode, {
 
 ### 传感器刷新频率
 
-位置：**设置 → 📟 传感器设置 → 刷新间隔**（单位：ms，默认 1000ms）
+位置：**设置 → 传感器设置 → 刷新间隔**（单位：ms，默认 1000ms）
 
 持久化存储在 `SharedConfig.ets` 中，重启后恢复为默认值。
 
