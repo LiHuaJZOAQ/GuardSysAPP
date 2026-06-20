@@ -15,9 +15,9 @@
 ## 功能
 
 ### 传感器采集
-- **SHT30** — 温度 + 湿度（I2C GPIO 5, 0x44）
-- **MQ-2** — 烟雾浓度（GPIO 1）
-- **HC-SR501** — 红外人体检测（GPIO 9），支持布防/撤防模式
+- **SHT30** — 温度 + 湿度（I2C 5, 0x44）
+- **MQ-2** — 烟雾浓度（ADC 1）
+- **HC-SR501** — 红外人体检测（GPIO 388），支持布防/撤防模式
 - 三传感器 **逐个 await + try-catch** 读取，单传感器失败用默认值继续（不整批丢失）
 - 点击传感器卡片单独刷新对应传感器数据
 - 采集失败时仪表板显示红色错误横幅
@@ -99,8 +99,8 @@ entry/src/main/ets/
 
 - 九联开发板（OpenHarmony 4.0）
 - SHT30 温湿度传感器（I2C 5, 0x44）
-- MQ-2 烟雾传感器（GPIO 1）
-- HC-SR501 红外人体感应模块（GPIO 9）
+- MQ-2 烟雾传感器（ADC 1）
+- HC-SR501 红外人体感应模块（GPIO 388）
 - 蜂鸣器（GPIO 384）+ RGB LED（R=381, G=382, B=383）
 
 ## 开发环境
@@ -252,13 +252,13 @@ ws://host:port/device   (其他端口)
 ```typescript
 // 文件: entry/src/main/ets/pages/SensorManager.ets
 
-// SHT30 — GPIO 5, I2C 地址 0x44
+// SHT30 — I2C 5, I2C 地址 0x44
 const res: Sht30Data = await guardsys_napi.getSht30Data(5, 0x44);
 
-// MQ-2 — GPIO 1
+// MQ-2 — ADC 1
 const res: Mq2Data = await guardsys_napi.getMq2Data(1);
 
-// HC-SR501 红外 — GPIO 9
+// HC-SR501 红外 — GPIO 388
 const res: IrData = await guardsys_napi.getIrStatus(9);
 
 // 报警输出 — 蜂鸣器 GPIO 384, RGB R=381, G=382, B=383
@@ -298,9 +298,9 @@ await guardsys_napi.setAlarmStatus(mode, {
 
 | 功能 | 引脚 |
 |------|------|
-| SHT30 I2C | GPIO 5, 地址 0x44 |
-| MQ-2 | GPIO 1 |
-| HC-SR501 红外 | GPIO 9 |
+| SHT30 I2C | I2C 5, 地址 0x44 |
+| MQ-2 | ADC 1 |
+| HC-SR501 红外 | GPIO 388 |
 | 蜂鸣器 | GPIO 384 |
 | 红灯 (R) | GPIO 381 |
 | 绿灯 (G) | GPIO 382 |
