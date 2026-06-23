@@ -9,4 +9,5 @@
 /.clang-format
 /.clang-tidy
 **/.test
+AGENTS.md
 build-profile.json5
